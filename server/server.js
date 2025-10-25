@@ -1,46 +1,60 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import "./config/dotenv.js";
-import { createConnectionRequest, sendWelcomeEmail } from "./lib/composio.js";
+import cors from "cors";
+
+// Import configuration and services
+import { config } from "./config/index.js";
+
+// Import route handlers
+import * as authRoutes from "./routes/auth.js";
+import * as toolsRoutes from "./routes/tools.js";
+import * as canvasRoutes from "./routes/canvas.js";
+import { chat } from "./routes/chat.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
 
+// Middleware
+app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "../client/public")));
+app.use(express.static(path.join(__dirname, "../client/dist")));
 
-app.post("/api/composio/link", async (req, res) => {
-  const { externalUserId } = req.body || {};
+// Auth routes
+app.get("/api/auth/gmail/start", authRoutes.startGmailAuth);
+app.post("/api/auth/canvas/start", authRoutes.startCanvasAuth);
+app.get("/api/auth/gmail/callback", authRoutes.gmailCallback);
+app.get("/api/auth/canvas/callback", authRoutes.canvasCallback);
+app.get("/api/auth/status", authRoutes.checkAuthStatus);
+app.post("/api/auth/gmail/unlink", authRoutes.unlinkGmail);
 
-  try {
-    const connectionRequest = await createConnectionRequest(externalUserId);
-    res.json({ redirectUrl: connectionRequest.redirectUrl });
-  } catch (error) {
-    console.error("Failed to start Composio link flow", error);
-    res.status(500).json({ message: "Unable to start Composio link flow" });
-  }
+// Tools routes
+app.get("/api/tools/count", toolsRoutes.getToolsCount);
+app.get("/api/tools/search", toolsRoutes.searchTools);
+app.get("/api/tools/canvas/search", toolsRoutes.searchCanvasTools);
+
+// Canvas routes
+app.post("/api/assignments/:courseId", canvasRoutes.getAssignments);
+app.get("/api/discussions", canvasRoutes.getDiscussions);
+
+// Chat route
+app.post("/api/chat", chat);
+
+// 404 handler for API routes
+app.use("/api", (req, res) => {
+  res
+    .status(404)
+    .json({ ok: false, error: "Not found", path: req.originalUrl });
 });
 
-app.post("/api/composio/send-welcome", async (req, res) => {
-  const { externalUserId } = req.body || {};
-
-  try {
-    await sendWelcomeEmail(externalUserId);
-    res.json({ ok: true });
-  } catch (error) {
-    console.error("Failed to send welcome email", error);
-    res.status(500).json({ message: "Unable to send welcome email" });
-  }
-});
-
+// Serve React app
 app.get("/", (req, res) => {
-  res.status(200).sendFile(path.resolve(__dirname, "../client"));
+  res.sendFile(path.resolve(__dirname, "../client/dist/index.html"));
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running http://localhost:${PORT}`);
+// Start server
+app.listen(config.PORT, () => {
+  console.log(`Server running on http://localhost:${config.PORT}`);
 });

@@ -1,120 +1,198 @@
-import { useMemo, useState } from "react";
-import "./App.css";
+import { useEffect, useRef, useState } from "react";
 
-const DEFAULT_EXTERNAL_USER_ID = "pg-test-1434803e-a3dd-4458-b954-2c0c312cad87";
+export default function App() {
+  const [userId] = useState(() => {
+    // Use a consistent user ID stored in localStorage, or generate one
+    const stored = localStorage.getItem('userId');
+    if (stored) return stored;
+    const newId = crypto.randomUUID();
+    localStorage.setItem('userId', newId);
+    return newId;
+  });
+  const [messages, setMessages] = useState([
+    { role: "assistant", content: "Hi! Ask me about your Canvas assignments or Gmail." }
+  ]);
+  const [input, setInput] = useState("");
+  const [pending, setPending] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState({
+    gmail: false,
+    canvas: false,
+    loading: true
+  });
+  const endRef = useRef(null);
 
-function App() {
-  const [isLinking, setIsLinking] = useState(false);
-  const [linkError, setLinkError] = useState("");
-  const [isSending, setIsSending] = useState(false);
-  const [sendError, setSendError] = useState("");
-  const [sendSuccess, setSendSuccess] = useState(false);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-  const view = useMemo(() => {
-    if (typeof window === "undefined") return "connect";
-
-    const normalizedPath = window.location.pathname.replace(/\/$/, "");
-    if (normalizedPath === "/connected") {
-      return "post-connect";
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("connected") === "true") {
-      return "post-connect";
-    }
-
-    return "connect";
+  useEffect(() => {
+    checkConnectionStatus();
   }, []);
 
-  const handleConnectClick = async () => {
-    setLinkError("");
-    setIsLinking(true);
-
+  async function checkConnectionStatus() {
     try {
-      const response = await fetch("/api/composio/link", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          externalUserId: DEFAULT_EXTERNAL_USER_ID,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to start the Composio link flow");
+      const res = await fetch("/api/auth/status");
+      const data = await res.json();
+      if (data?.ok) {
+        setConnectionStatus({
+          gmail: data.connectedAccounts.gmail,
+          canvas: data.connectedAccounts.canvas,
+          loading: false
+        });
       }
-
-      const { redirectUrl } = await response.json();
-      window.location.href = redirectUrl;
-    } catch (err) {
-      setIsLinking(false);
-      setLinkError(err.message || "Something went wrong");
+    } catch (e) {
+      console.error("Failed to check connection status:", e);
+      setConnectionStatus(prev => ({ ...prev, loading: false }));
     }
-  };
+  }
 
-  const handleSendClick = async () => {
-    setSendError("");
-    setSendSuccess(false);
-    setIsSending(true);
+  function extractAssistantText(result) {
+    if (!result?.content || !Array.isArray(result.content)) return "";
+    return result.content
+      .filter((part) => part?.type === "text" && typeof part.text === "string")
+      .map((part) => part.text.trim())
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
+  async function connectGmail() {
+    try {
+      const res = await fetch(`/api/auth/gmail/start?userId=${userId}`);
+      const data = await res.json();
+      if (data?.ok && data.url) {
+        window.open(data.url, '_blank');
+        // Check status after a delay to see if connection was successful
+        setTimeout(checkConnectionStatus, 3000);
+      }
+    } catch (e) {
+      console.error("Failed to start Gmail auth:", e);
+    }
+  }
+
+  async function connectCanvas() {
+    try {
+      const res = await fetch("/api/auth/canvas/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      if (data?.ok) {
+        // Canvas uses API key authentication, so it should connect immediately
+        checkConnectionStatus();
+      }
+    } catch (e) {
+      console.error("Failed to start Canvas auth:", e);
+    }
+  }
+
+  async function send() {
+    const text = input.trim();
+    if (!text || pending) return;
+
+    setMessages((m) => [...m, { role: "user", content: text }]);
+    setInput("");
+    setPending(true);
 
     try {
-      const response = await fetch("/api/composio/send-welcome", {
+      const res = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          externalUserId: DEFAULT_EXTERNAL_USER_ID,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, userMessage: text })
       });
+      const data = await res.json();
 
-      if (!response.ok) {
-        throw new Error("Failed to send the welcome email");
+      if (data?.ok) {
+        const replyText = extractAssistantText(data.result);
+        const fallback =
+          typeof data?.reply === "string" ? data.reply : "";
+        const reply = replyText || fallback || "OK.";
+        setMessages((m) => [...m, { role: "assistant", content: reply }]);
+      } else {
+        setMessages((m) => [
+          ...m,
+          { role: "assistant", content: `Error: ${data?.error || "Unknown error"}` }
+        ]);
       }
-
-      setSendSuccess(true);
-    } catch (err) {
-      setSendError(err.message || "Something went wrong");
+    } catch (e) {
+      setMessages((m) => [...m, { role: "assistant", content: `Network error: ${e.message}` }]);
     } finally {
-      setIsSending(false);
+      setPending(false);
     }
-  };
+  }
 
-  if (view === "post-connect") {
-    return (
-      <main className="connect-card">
-        <h1>Account linked ✅</h1>
-        <p>
-          Click the button to have Claude trigger the Composio Gmail tool using
-          your newly connected account.
-        </p>
-        <button onClick={handleSendClick} disabled={isSending}>
-          {isSending ? "Sending..." : "Send the welcome email"}
-        </button>
-        {sendSuccess && <p className="success">Email sent!</p>}
-        {sendError && <p className="error">{sendError}</p>}
-      </main>
-    );
+  function onKeyDown(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
   }
 
   return (
-    <main className="connect-card">
-      <h1>Connect your Gmail</h1>
-      <p>
-        Start the Composio OAuth flow to grant access so we can send emails on
-        your behalf.
-      </p>
-      <button onClick={handleConnectClick} disabled={isLinking}>
-        {isLinking ? "Redirecting..." : "Connect with Composio"}
-      </button>
-      {linkError && <p className="error">{linkError}</p>}
-      <p className="hint">
-        Set the Composio redirect URL to <code>http://localhost:5173/connected</code>
-        so we can show the send-email button afterwards.
-      </p>
-    </main>
+    <div>
+      <h1>Chat</h1>
+      
+      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
+        <button 
+          onClick={connectGmail}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: connectionStatus.gmail ? '#4CAF50' : '#f44336',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Gmail: {connectionStatus.gmail ? 'Connected' : 'Not Connected'}
+        </button>
+        <button 
+          onClick={connectCanvas}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: connectionStatus.canvas ? '#4CAF50' : '#f44336',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Canvas: {connectionStatus.canvas ? 'Connected' : 'Not Connected'}
+        </button>
+        {connectionStatus.loading && <span>Loading...</span>}
+      </div>
+
+      <div>
+        {messages.map((m, i) => (
+          <div key={i}>
+            <strong>{m.role === "user" ? "You" : "Assistant"}: </strong>
+            <span>{m.content}</span>
+          </div>
+        ))}
+        {pending && (
+          <div>
+            <strong>Assistant: </strong>
+            <span>…</span>
+          </div>
+        )}
+        <div ref={endRef} />
+      </div>
+
+      <div>
+        <textarea
+          rows={2}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="Type a message"
+          disabled={pending}
+        />
+        <div>
+          <button onClick={send} disabled={pending || !input.trim()}>
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
-
-export default App;
