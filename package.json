@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "",
   "type": "module",
-  "main": "server.js",
   "scripts": {
     "dev": "concurrently \"cd client && vite\" \"cd server && nodemon server\"",
     "start": "cd server && node server",
