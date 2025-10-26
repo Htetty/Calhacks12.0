@@ -4,7 +4,7 @@ import {
   anthropic,
   composio,
   DEFAULT_EXTERNAL_USER_ID,
-} from "../services/ai.js";
+} from "../services/mcp.js";
 
 /**
  * Utility: check if an Anthropic message content array includes any tool_use blocks
@@ -57,34 +57,11 @@ function matchesUser(conn, externalUserId) {
 
 // Simple chat function - let Claude + Composio handle the complexity
 export const chat = async (req, res) => {
-  console.log("🔥🔥🔥 API CHAT ROUTE HIT! 🔥🔥🔥");
-  console.log("🚀 CHAT FUNCTION CALLED!");
-  console.log("Request body:", JSON.stringify(req.body, null, 2));
-
   try {
     const { userMessage, conversationHistory = [], userId } = req.body;
     const externalUserId = userId || DEFAULT_EXTERNAL_USER_ID;
 
-    console.log("═══════════════════════════════════════");
-    console.log("📝 User message:", userMessage);
-    console.log("📊 Conversation history length:", conversationHistory.length);
-    console.log("🆔 Frontend user ID:", userId);
-    console.log("👤 External user ID:", externalUserId);
-    console.log("═══════════════════════════════════════");
-
-    // Env checks
-    console.log("🔐 Environment check:");
-    console.log(
-      "  - COMPOSIO_API_KEY:",
-      process.env.COMPOSIO_API_KEY ? "✓ Set" : "✗ Missing"
-    );
-    console.log(
-      "  - ANTHROPIC_API_KEY:",
-      process.env.ANTHROPIC_API_KEY ? "✓ Set" : "✗ Missing"
-    );
-
     if (!process.env.COMPOSIO_API_KEY) {
-      console.error("❌ COMPOSIO_API_KEY missing");
       return res.status(500).json({
         ok: false,
         error:
@@ -92,7 +69,6 @@ export const chat = async (req, res) => {
       });
     }
     if (!process.env.ANTHROPIC_API_KEY) {
-      console.error("❌ ANTHROPIC_API_KEY missing");
       return res.status(500).json({
         ok: false,
         error:
@@ -102,34 +78,23 @@ export const chat = async (req, res) => {
 
     // Basic validation
     if (!userMessage || typeof userMessage !== "string") {
-      console.error("❌ Invalid user message:", userMessage);
       return res.status(400).json({ ok: false, error: "Invalid user message" });
     }
 
-    console.log("✅ Validation passed");
-
     // Determine which services are connected for this user
-    console.log("🔍 Fetching connected accounts...");
     let connectionItems = [];
     try {
       const allConnections = await composio.connectedAccounts.list();
       connectionItems = Array.isArray(allConnections?.items)
         ? allConnections.items
         : [];
-      console.log(`📋 Found ${connectionItems.length} total connections`);
     } catch (connectionError) {
       if (
         connectionError?.message &&
         connectionError.message.includes("Connected account not found")
       ) {
-        console.warn(
-          "⚠️ No connected accounts found. Proceeding without tools."
-        );
+        // No connected accounts, proceed without tools
       } else {
-        console.error(
-          "❌ Error fetching connections:",
-          connectionError.message
-        );
         throw connectionError;
       }
     }
@@ -138,15 +103,9 @@ export const chat = async (req, res) => {
       (conn) => matchesUser(conn, externalUserId) && isActive(conn)
     );
 
-    console.log(`🔐 User-specific connections: ${userConnections.length}`);
-
     // Fallback: any active connections if external_user_id was not set during auth
     if (userConnections.length === 0) {
-      console.log(
-        "⚠️ No user-specific connections; falling back to any ACTIVE connections."
-      );
       userConnections = connectionItems.filter(isActive);
-      console.log(`📌 Fallback connections: ${userConnections.length}`);
     }
 
     const hasGmail = userConnections.some((c) => normalizeSlug(c) === "gmail");
@@ -159,22 +118,10 @@ export const chat = async (req, res) => {
     );
     const hasZoom = userConnections.some((c) => normalizeSlug(c) === "zoom");
 
-    console.log("🔌 User connection status:", {
-      userId: externalUserId,
-      gmail: hasGmail,
-      googlecalendar: hasGoogleCalendar,
-      canvas: hasCanvas,
-      zoom: hasZoom,
-      totalConnections: userConnections.length,
-    });
-
     // Load tools only for connected services
     const tools = [];
 
-    console.log("🛠️  Starting tool loading process...");
-
     if (hasGmail) {
-      console.log("🔄 Loading Gmail tools...");
       try {
         const gmailTools = await composio.tools.get(externalUserId, {
           tools: [
@@ -183,32 +130,24 @@ export const chat = async (req, res) => {
             "GMAIL_GET_PROFILE",
           ],
         });
-        console.log("✅ Gmail tools loaded:", gmailTools.length);
         tools.push(...gmailTools);
       } catch (err) {
-        console.error("❌ Failed to load Gmail tools:", err.message);
+        // Failed to load Gmail tools
       }
-    } else {
-      console.log("⏭️  Skipping Gmail tools (not connected)");
     }
 
     if (hasGoogleCalendar) {
-      console.log("🔄 Loading Google Calendar tools...");
       try {
         const calendarTools = await composio.tools.get(externalUserId, {
           tools: ["GOOGLECALENDAR_LIST_EVENTS", "GOOGLECALENDAR_FIND_EVENT"],
         });
-        console.log("✅ Google Calendar tools loaded:", calendarTools.length);
         tools.push(...calendarTools);
       } catch (err) {
-        console.error("❌ Failed to load Calendar tools:", err.message);
+        // Failed to load Calendar tools
       }
-    } else {
-      console.log("⏭️  Skipping Calendar tools (not connected)");
     }
 
     if (hasCanvas) {
-      console.log("🔄 Loading Canvas tools...");
       try {
         const canvasTools = await composio.tools.get(externalUserId, {
           tools: [
@@ -217,13 +156,8 @@ export const chat = async (req, res) => {
             "CANVAS_GET_ASSIGNMENT",
           ],
         });
-        console.log("✅ Canvas tools loaded:", canvasTools.length);
         tools.push(...canvasTools);
       } catch (canvasError) {
-        console.error(
-          "⚠️ Canvas tools failed with user. Trying DEFAULT_EXTERNAL_USER_ID:",
-          canvasError?.message
-        );
         try {
           const canvasTools = await composio.tools.get(
             DEFAULT_EXTERNAL_USER_ID,
@@ -236,43 +170,12 @@ export const chat = async (req, res) => {
               toolkits: ["CANVAS"],
             }
           );
-          console.log(
-            "✅ Canvas tools loaded with default user:",
-            canvasTools.length
-          );
           tools.push(...canvasTools);
         } catch (retryError) {
-          console.error(
-            "❌ Canvas tools failed with default user:",
-            retryError?.message
-          );
+          // Failed to load Canvas tools
         }
       }
-    } else {
-      console.log("⏭️  Skipping Canvas tools (not connected)");
     }
-
-    console.log("═══════════════════════════════════════");
-    console.log(`🔧 TOTAL TOOLS LOADED: ${tools.length}`);
-    console.log(
-      "🔧 Tool names:",
-      tools.map((t) => t.name)
-    );
-    console.log("═══════════════════════════════════════");
-
-    console.log("🔗 ALL CONNECTED ACCOUNTS:");
-    console.log(
-      JSON.stringify(
-        connectionItems.map((c) => ({
-          toolkit: c.toolkit?.slug,
-          status: c.status,
-          external_user_id: c.external_user_id,
-        })),
-        null,
-        2
-      )
-    );
-    console.log("═══════════════════════════════════════");
 
     const connectionStatus = {
       gmail: hasGmail,
@@ -336,14 +239,6 @@ ENVIRONMENT HINTS
 - TIME ZONE: America/Los_Angeles
 `.trim();
 
-    // Build the first request
-    console.log("🎯 Building first Claude request...");
-    console.log(`  - System prompt length: ${systemPrompt.length} chars`);
-    console.log(
-      `  - Conversation history messages: ${conversationHistory.length}`
-    );
-    console.log(`  - Tools available: ${tools.length}`);
-
     const request = {
       model: "claude-3-5-sonnet-20241022",
       system: systemPrompt,
@@ -356,29 +251,16 @@ ENVIRONMENT HINTS
     };
 
     // First model response
-    console.log("📡 Calling Claude API...");
     let firstResponse = await anthropic.messages.create(request);
-    console.log("🤖 Claude first response received");
-    console.log(`  - Response type: ${firstResponse.content?.[0]?.type}`);
-    console.log(`  - Has tool_use: ${hasToolUse(firstResponse.content)}`);
 
     const firstTextOnly =
       firstResponse?.content?.find?.((b) => b.type === "text")?.text ?? "";
-    console.log(
-      `  - First text response: "${firstTextOnly.substring(0, 50)}..."`
-    );
 
     // If tools exist but model did not emit tool_use OR returned trivial response, force a retry
     if (
       tools.length > 0 &&
       (!hasToolUse(firstResponse.content) || isTrivial(firstTextOnly))
     ) {
-      console.log(
-        `⚠️ Response is ${
-          !hasToolUse(firstResponse.content) ? "missing tool_use" : "trivial"
-        }; forcing retry`
-      );
-      console.log("📡 Calling Claude API with forced tool usage...");
       const nudge =
         "Call the appropriate tool now. Return the actual answer in short paragraphs—no acknowledgments.";
       firstResponse = await anthropic.messages.create({
@@ -392,66 +274,35 @@ ENVIRONMENT HINTS
         max_tokens: 2000,
         tools,
       });
-      console.log("🤖 Claude forced-tool response received");
-      console.log(`  - Has tool_use now: ${hasToolUse(firstResponse.content)}`);
     }
 
     // Execute tools if any tool_use blocks are present
     let toolResults = [];
     if (tools.length > 0 && hasToolUse(firstResponse.content)) {
-      console.log("🔧 Executing tools...");
       try {
-        console.log(`📞 Calling tools with externalUserId: ${externalUserId}`);
         toolResults = await composio.provider.handleToolCalls(
           externalUserId,
           firstResponse
         );
-        console.log(
-          "✅ Tool execution succeeded:",
-          toolResults?.length || 0,
-          "tools called"
-        );
-        console.log(
-          "Tool result types:",
-          toolResults.map((r) => r.role)
-        );
       } catch (toolError) {
-        console.error(
-          "❌ Tool execution failed with user ID:",
-          toolError?.message
-        );
         if (
           toolError?.message?.includes("No connected account found") &&
           externalUserId !== DEFAULT_EXTERNAL_USER_ID
         ) {
-          console.log("🔄 Retrying tool calls with DEFAULT_EXTERNAL_USER_ID");
           try {
             toolResults = await composio.provider.handleToolCalls(
               DEFAULT_EXTERNAL_USER_ID,
               firstResponse
             );
-            console.log(
-              "✅ Tool results (retry):",
-              toolResults?.length || 0,
-              "tools called"
-            );
           } catch (retryError) {
-            console.error(
-              "❌ Tool execution failed with default user:",
-              retryError?.message
-            );
+            // Tool execution failed
           }
         }
       }
-    } else if (tools.length > 0) {
-      console.log("⏭️  No tool_use detected, skipping tool execution");
-    } else {
-      console.log("⏭️  No tools available, skipping tool execution");
     }
 
     // If tools were used, follow up to format results in the required style
     if (toolResults && toolResults.length > 0) {
-      console.log("📝 Formatting tool results with follow-up...");
       const followUp = await anthropic.messages.create({
         model: "claude-3-5-sonnet-20241022",
         system: systemPrompt,
@@ -466,8 +317,6 @@ ENVIRONMENT HINTS
         max_tokens: 3000,
       });
 
-      console.log("✅ Final response ready (with tools)");
-
       return res.json({
         ok: true,
         result: followUp,
@@ -479,7 +328,6 @@ ENVIRONMENT HINTS
     // No tool execution or no tools available
     // Build friendly, human fallbacks that never leak "Let me check" meta-text
     if (tools.length === 0) {
-      console.log("⚠️  No tools available, returning fallback message");
       const lines = [];
       if (!hasGoogleCalendar) lines.push("• Google Calendar not connected");
       if (!hasGmail) lines.push("• Gmail not connected");
@@ -506,9 +354,6 @@ ENVIRONMENT HINTS
     }
 
     // Tools exist but no tool_use and no tool results
-    console.log(
-      "⚠️  Tools exist but no tool execution occurred, returning fallback"
-    );
     return res.json({
       ok: true,
       result: {
@@ -522,11 +367,6 @@ ENVIRONMENT HINTS
       connectionStatus,
     });
   } catch (error) {
-    console.error("═══════════════════════════════════════");
-    console.error("❌ CHAT FUNCTION ERROR:", error);
-    console.error("Error stack:", error.stack);
-    console.error("═══════════════════════════════════════");
-
     if (error?.message && error.message.includes("prompt is too long")) {
       return res.status(400).json({
         ok: false,

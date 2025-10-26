@@ -1,8 +1,7 @@
 import { AuthScheme } from "@composio/core";
-import { composio, DEFAULT_EXTERNAL_USER_ID } from "../services/ai.js";
+import { composio, DEFAULT_EXTERNAL_USER_ID } from "../services/mcp.js";
 import { config } from "../config/index.js";
 
-// Start Gmail authentication
 export const startGmailAuth = async (req, res) => {
   try {
     // Check if required environment variables are configured
@@ -23,7 +22,6 @@ export const startGmailAuth = async (req, res) => {
     }
 
     const externalUserId = req.query.userId || DEFAULT_EXTERNAL_USER_ID; // Use userId from query or default
-    console.log("Gmail auth - using external user ID:", externalUserId);
     const r = await composio.connectedAccounts.link(
       externalUserId,
       config.GMAIL_AUTH_CONFIG_ID,
@@ -42,7 +40,6 @@ export const startZoomAuth = async (req, res) => {
   try {
     // Check if required environment variables are configured
     if (!config.COMPOSIO_API_KEY) {
-      console.error("Zoom auth failed: COMPOSIO_API_KEY not configured");
       return res.status(500).json({
         ok: false,
         error:
@@ -51,7 +48,6 @@ export const startZoomAuth = async (req, res) => {
     }
 
     if (!config.ZOOM_AUTH_CONFIG_ID) {
-      console.error("Zoom auth failed: ZOOM_AUTH_CONFIG_ID not configured");
       return res.status(500).json({
         ok: false,
         error:
@@ -60,9 +56,6 @@ export const startZoomAuth = async (req, res) => {
     }
 
     if (!config.ZOOM_LINK_CALLBACK_URL_ZOOM) {
-      console.error(
-        "Zoom auth failed: ZOOM_LINK_CALLBACK_URL_ZOOM not configured"
-      );
       return res.status(500).json({
         ok: false,
         error:
@@ -72,26 +65,17 @@ export const startZoomAuth = async (req, res) => {
 
     const externalUserId = req.query.userId || DEFAULT_EXTERNAL_USER_ID; // Use userId from query or default
 
-    console.log("Zoom auth attempt:", {
-      externalUserId,
-      configId: config.ZOOM_AUTH_CONFIG_ID,
-      callbackUrl: config.ZOOM_LINK_CALLBACK_URL_ZOOM,
-    });
-
     const r = await composio.connectedAccounts.link(
       externalUserId,
       config.ZOOM_AUTH_CONFIG_ID,
       { callbackUrl: config.ZOOM_LINK_CALLBACK_URL_ZOOM }
     );
 
-    console.log("Composio response:", r);
-
     const url = r.linkUrl || r.redirectUrl;
     if (!url)
       return res.status(500).json({ ok: false, error: "Missing linkUrl" });
     res.json({ ok: true, url });
   } catch (e) {
-    console.error("Zoom auth error:", e);
     res.status(500).json({ ok: false, error: String(e) });
   }
 };
@@ -99,7 +83,6 @@ export const startZoomAuth = async (req, res) => {
 export const startCanvasAuth = async (req, res) => {
   try {
     const externalUserId = req.body.userId || DEFAULT_EXTERNAL_USER_ID; // Use userId from body or default
-    console.log("Canvas auth - using external user ID:", externalUserId);
     const apiKey = req.body.apiKey || config.CANVAS_API_KEY;
     const baseUrl = req.body.baseUrl || config.CANVAS_BASE_URL;
     const resp = await composio.connectedAccounts.initiate(
@@ -126,14 +109,12 @@ export const gmailCallback = async (req, res) => {
     const { error, status, connected_account_id } = req.query;
 
     if (error) {
-      console.error("Gmail auth error:", error);
       return res
         .status(400)
         .json({ ok: false, error: `Authentication failed: ${error}` });
     }
 
     if (status === "success" && connected_account_id) {
-      console.log("✅ Gmail authentication successful!");
       const redirectUrl =
         process.env.NODE_ENV === "production"
           ? "/?auth=success&account_id=" + connected_account_id
@@ -143,13 +124,11 @@ export const gmailCallback = async (req, res) => {
     }
 
     if (!connected_account_id) {
-      console.error("No connected account ID received");
       return res.status(400).json({ ok: false, error: "Missing account ID" });
     }
 
     res.redirect("/?auth=success");
   } catch (e) {
-    console.error("Callback error:", e);
     res.status(500).json({ ok: false, error: String(e) });
   }
 };
@@ -159,14 +138,12 @@ export const zoomCallback = async (req, res) => {
     const { error, status, connected_account_id } = req.query;
 
     if (error) {
-      console.error("Zoom auth error:", error);
       return res
         .status(400)
         .json({ ok: false, error: `Authentication failed: ${error}` });
     }
 
     if (status === "success" && connected_account_id) {
-      console.log("✅ Zoom authentication successful!");
       const redirectUrl =
         process.env.NODE_ENV === "production"
           ? "/?auth=success&account_id=" + connected_account_id
@@ -176,13 +153,11 @@ export const zoomCallback = async (req, res) => {
     }
 
     if (!connected_account_id) {
-      console.error("No connected account ID received");
       return res.status(400).json({ ok: false, error: "Missing account ID" });
     }
 
     res.redirect("/?auth=success");
   } catch (e) {
-    console.error("Callback error:", e);
     res.status(500).json({ ok: false, error: String(e) });
   }
 };
@@ -208,10 +183,6 @@ export const startGoogleCalendarAuth = async (req, res) => {
     }
 
     const externalUserId = req.query.userId || DEFAULT_EXTERNAL_USER_ID;
-    console.log(
-      "Google Calendar auth - using external user ID:",
-      externalUserId
-    );
     const r = await composio.connectedAccounts.link(
       externalUserId,
       config.GCALENDAR_AUTH_CONFIG_ID,
@@ -232,14 +203,12 @@ export const googleCalendarCallback = async (req, res) => {
     const { error, status, connected_account_id } = req.query;
 
     if (error) {
-      console.error("Google Calendar auth error:", error);
       return res
         .status(400)
         .json({ ok: false, error: `Authentication failed: ${error}` });
     }
 
     if (status === "success" && connected_account_id) {
-      console.log("✅ Google Calendar authentication successful!");
       const redirectUrl =
         process.env.NODE_ENV === "production"
           ? "/?auth=success&account_id=" + connected_account_id
@@ -249,13 +218,11 @@ export const googleCalendarCallback = async (req, res) => {
     }
 
     if (!connected_account_id) {
-      console.error("No connected account ID received");
       return res.status(400).json({ ok: false, error: "Missing account ID" });
     }
 
     res.redirect("/?auth=success");
   } catch (e) {
-    console.error("Callback error:", e);
     res.status(500).json({ ok: false, error: String(e) });
   }
 };
@@ -266,27 +233,23 @@ export const canvasCallback = async (req, res) => {
     const { error, status, connected_account_id } = req.query;
 
     if (error) {
-      console.error("Canvas auth error:", error);
       return res
         .status(400)
         .json({ ok: false, error: `Authentication failed: ${error}` });
     }
 
     if (status === "success" && connected_account_id) {
-      console.log("✅ Canvas authentication successful!");
       return res.redirect(
         "/?auth=canvas_success&account_id=" + connected_account_id
       );
     }
 
     if (!connected_account_id) {
-      console.error("No connected account ID received");
       return res.status(400).json({ ok: false, error: "Missing account ID" });
     }
 
     res.redirect("/?auth=canvas_success");
   } catch (e) {
-    console.error("Canvas callback error:", e);
     res.status(500).json({ ok: false, error: String(e) });
   }
 };

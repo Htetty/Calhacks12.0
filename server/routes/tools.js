@@ -1,4 +1,4 @@
-import { composio, DEFAULT_EXTERNAL_USER_ID } from "../services/ai.js";
+import { composio, DEFAULT_EXTERNAL_USER_ID } from "../services/mcp.js";
 
 // Check available tools count for each service
 export const getToolsCount = async (req, res) => {

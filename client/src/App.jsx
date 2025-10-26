@@ -21,11 +21,34 @@ export default function App() {
     zoom: false,
     loading: true
   });
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const endRef = useRef(null);
+  const audioRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const streamRef = useRef(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Cleanup audio when component unmounts
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   useEffect(() => {
     checkConnectionStatus();
@@ -131,6 +154,178 @@ export default function App() {
     }
   }
 
+  async function playTTS(text) {
+    try {
+      setIsPlayingAudio(true);
+      
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+
+      if (!res.ok) {
+        throw new Error("TTS request failed");
+      }
+
+      const blob = await res.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      
+      if (audioRef.current) {
+        audioRef.current.pause();
+        URL.revokeObjectURL(audioRef.current.src);
+      }
+      
+      audioRef.current = new Audio(audioUrl);
+      audioRef.current.onended = () => {
+        setIsPlayingAudio(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+      audioRef.current.onerror = () => {
+        setIsPlayingAudio(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+      
+      await audioRef.current.play();
+    } catch (error) {
+      console.error("Failed to play TTS:", error);
+      setIsPlayingAudio(false);
+      // Fallback to browser's Web Speech API
+      if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.onend = () => setIsPlayingAudio(false);
+        utterance.onerror = () => setIsPlayingAudio(false);
+        speechSynthesis.speak(utterance);
+      }
+    }
+  }
+
+  function stopTTS() {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlayingAudio(false);
+    }
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+    }
+  }
+
+  async function handleRecordStart() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        
+        // Stop all tracks
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+          streamRef.current = null;
+        }
+        
+        // Transcribe the audio
+        if (audioBlob.size > 0) {
+          await transcribeAudio(audioBlob);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error("Failed to start recording:", error);
+      alert("Failed to access microphone. Please check permissions.");
+    }
+  }
+
+  function handleRecordStop() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  }
+
+  async function transcribeAudio(audioBlob) {
+    try {
+      setIsTranscribing(true);
+      
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+
+      const res = await fetch("/api/asr", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (data?.ok && data.text) {
+        // Add the transcribed text to the input
+        setInput(data.text);
+        
+        // Automatically send the transcribed text
+        const transcript = data.text;
+        if (transcript && transcript.trim()) {
+          // Add user message
+          setMessages((m) => [...m, { role: "user", content: transcript }]);
+          
+          // Start the chat request
+          setPending(true);
+          
+          try {
+            const chatRes = await fetch("/api/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId, userMessage: transcript })
+            });
+            
+            const chatData = await chatRes.json();
+
+            if (chatData?.ok) {
+              const replyText = extractAssistantText(chatData.result);
+              const fallback =
+                typeof chatData?.reply === "string" ? chatData.reply : "";
+              const reply = replyText || fallback || "OK.";
+              
+              setMessages((m) => [...m, { role: "assistant", content: reply }]);
+              
+              // Automatically play TTS for assistant responses
+              if (reply && reply.trim().length > 0) {
+                await playTTS(reply);
+              }
+            } else {
+              setMessages((m) => [
+                ...m,
+                { role: "assistant", content: `Error: ${chatData?.error || "Unknown error"}` }
+              ]);
+            }
+          } catch (e) {
+            setMessages((m) => [...m, { role: "assistant", content: `Network error: ${e.message}` }]);
+          } finally {
+            setPending(false);
+          }
+        }
+      } else {
+        alert("Failed to transcribe audio: " + (data?.error || "Unknown error"));
+      }
+    } catch (error) {
+      console.error("Failed to transcribe audio:", error);
+      alert("Failed to transcribe audio");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || pending) return;
@@ -153,6 +348,11 @@ export default function App() {
           typeof data?.reply === "string" ? data.reply : "";
         const reply = replyText || fallback || "OK.";
         setMessages((m) => [...m, { role: "assistant", content: reply }]);
+        
+        // Automatically play TTS for assistant responses
+        if (reply && reply.trim().length > 0) {
+          await playTTS(reply);
+        }
       } else {
         setMessages((m) => [
           ...m,
@@ -246,6 +446,24 @@ export default function App() {
           <div key={i}>
             <strong>{m.role === "user" ? "You" : "Assistant"}: </strong>
             <span>{m.content}</span>
+            {m.role === "assistant" && (
+              <button
+                onClick={() => playTTS(m.content)}
+                disabled={isPlayingAudio}
+                style={{
+                  marginLeft: '10px',
+                  padding: '4px 8px',
+                  fontSize: '12px',
+                  backgroundColor: isPlayingAudio ? '#ccc' : '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: isPlayingAudio ? 'not-allowed' : 'pointer'
+                }}
+              >
+                🔊
+              </button>
+            )}
           </div>
         ))}
         {pending && (
@@ -254,18 +472,68 @@ export default function App() {
             <span>…</span>
           </div>
         )}
+        {isPlayingAudio && (
+          <div style={{ color: '#4CAF50', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span>🎵 Playing audio...</span>
+            <button
+              onClick={stopTTS}
+              style={{
+                padding: '4px 12px',
+                fontSize: '12px',
+                backgroundColor: '#f44336',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              ⏹️ Stop
+            </button>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
 
       <div>
-        <textarea
-          rows={2}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder="Type a message"
-          disabled={pending}
-        />
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <textarea
+            rows={2}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="Type a message or record audio..."
+            disabled={pending}
+            style={{ flex: 1 }}
+          />
+          <button
+            onMouseDown={handleRecordStart}
+            onMouseUp={handleRecordStop}
+            onMouseLeave={handleRecordStop}
+            onTouchStart={handleRecordStart}
+            onTouchEnd={handleRecordStop}
+            disabled={pending || isTranscribing}
+            style={{
+              padding: '10px',
+              backgroundColor: isRecording ? '#f44336' : '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: (pending || isTranscribing) ? 'not-allowed' : 'pointer',
+              minWidth: '50px',
+              opacity: (pending || isTranscribing) ? 0.5 : 1,
+              userSelect: 'none'
+            }}
+            title={isRecording ? "Recording... (Release to stop)" : "Hold to record audio"}
+          >
+            {isRecording ? '🔴' : '🎤'}
+          </button>
+        </div>
+        {(isRecording || isTranscribing) && (
+          <div style={{ color: '#2196F3', fontStyle: 'italic', margin: '5px 0' }}>
+            {isRecording && '🔴 Recording...'}
+            {isTranscribing && '📝 Transcribing...'}
+          </div>
+        )}
         <div>
           <button onClick={send} disabled={pending || !input.trim()}>
             Send
