@@ -10,13 +10,14 @@ export default function App() {
     return newId;
   });
   const [messages, setMessages] = useState([
-    { role: "assistant", content: "Hi! Ask me about your Canvas assignments or Gmail." }
+    { role: "assistant", content: "Hi! Ask me about your Canvas assignments, Gmail, Google Calendar, or Google Meetings." }
   ]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState({
     gmail: false,
     googlecalendar: false,
+    googlemeetings: false,
     canvas: false,
     loading: true
   });
@@ -74,6 +75,7 @@ export default function App() {
         setConnectionStatus({
           gmail: data.connectedAccounts.gmail,
           googlecalendar: data.connectedAccounts.googlecalendar,
+          googlemeetings: data.connectedAccounts.googlemeetings,
           canvas: data.connectedAccounts.canvas,
           loading: false
         });
@@ -135,6 +137,20 @@ export default function App() {
       }
     } catch (e) {
       console.error("Failed to start Google Calendar auth:", e);
+    }
+  }
+
+  async function connectGoogleMeetings() {
+    try {
+      const res = await fetch(`/api/auth/gmeetings/start?userId=${userId}`);
+      const data = await res.json();
+      if (data?.ok && data.url) {
+        window.open(data.url, '_blank');
+        // Check status after a delay to see if connection was successful
+        setTimeout(checkConnectionStatus, 5000);
+      }
+    } catch (e) {
+      console.error("Failed to start Google Meetings auth:", e);
     }
   }
 
@@ -391,6 +407,21 @@ export default function App() {
           }}
         >
           Calendar: {connectionStatus.googlecalendar ? 'Connected' : 'Not Connected'}
+        </button>
+        <button 
+          onClick={connectGoogleMeetings}
+          disabled={connectionStatus.googlemeetings}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: connectionStatus.googlemeetings ? '#4CAF50' : '#f44336',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: connectionStatus.googlemeetings ? 'not-allowed' : 'pointer',
+            opacity: connectionStatus.googlemeetings ? 0.7 : 1
+          }}
+        >
+          Meetings: {connectionStatus.googlemeetings ? 'Connected' : 'Not Connected'}
         </button>
         <button 
           onClick={connectCanvas}

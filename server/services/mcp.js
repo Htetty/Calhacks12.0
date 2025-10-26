@@ -12,6 +12,7 @@ export const composio = new Composio({
     GMAIL: "20251024_00",
     CANVAS: "20251023_01",
     GOOGLECALENDAR: "20251024_00",
+    GOOGLEMEETINGS: "20251024_00",
   },
 });
 

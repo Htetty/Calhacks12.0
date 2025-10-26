@@ -4,23 +4,6 @@ import { config } from "../config/index.js";
 
 export const startGmailAuth = async (req, res) => {
   try {
-    // Check if required environment variables are configured
-    if (!config.COMPOSIO_API_KEY) {
-      return res.status(500).json({
-        ok: false,
-        error:
-          "Composio API key not configured. Please set COMPOSIO_API_KEY in your .env file.",
-      });
-    }
-
-    if (!config.GMAIL_AUTH_CONFIG_ID) {
-      return res.status(500).json({
-        ok: false,
-        error:
-          "Gmail auth config ID not configured. Please set COMPOSIO_GMAIL_AUTH_CONFIG_ID in your .env file.",
-      });
-    }
-
     const externalUserId = req.query.userId || DEFAULT_EXTERNAL_USER_ID; // Use userId from query or default
     const r = await composio.connectedAccounts.link(
       externalUserId,
@@ -36,7 +19,6 @@ export const startGmailAuth = async (req, res) => {
   }
 };
 
-// Start Canvas authentication
 export const startCanvasAuth = async (req, res) => {
   try {
     const externalUserId = req.body.userId || DEFAULT_EXTERNAL_USER_ID; // Use userId from body or default
@@ -57,6 +39,56 @@ export const startCanvasAuth = async (req, res) => {
     res.json({ ok: true, data: resp });
   } catch (error) {
     res.status(500).json({ ok: false, error: String(error) });
+  }
+};
+
+export const startGoogleMeetingsAuth = async (req, res) => {
+  try {
+    if (!config.GOOGLEMEETINGS_AUTH_CONFIG_ID) {
+      return res.status(500).json({
+        ok: false,
+        error:
+          "Google Meetings auth config ID not configured. Please set COMPOSIO_GOOGLEMEETINGS_AUTH_CONFIG_ID in your .env file.",
+      });
+    }
+
+    if (!config.GOOGLEMEETINGS_LINK_CALLBACK_URL) {
+      return res.status(500).json({
+        ok: false,
+        error:
+          "Google Meetings callback URL not configured. Please set COMPOSIO_LINK_CALLBACK_URL_GOOGLEMEETINGS in your .env file.",
+      });
+    }
+
+    const externalUserId = req.query.userId || DEFAULT_EXTERNAL_USER_ID;
+    const r = await composio.connectedAccounts.link(
+      externalUserId,
+      config.GOOGLEMEETINGS_AUTH_CONFIG_ID,
+      { callbackUrl: config.GOOGLEMEETINGS_LINK_CALLBACK_URL }
+    );
+    const url = r.linkUrl || r.redirectUrl;
+    if (!url)
+      return res.status(500).json({ ok: false, error: "Missing linkUrl" });
+    res.json({ ok: true, url });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+};
+
+export const startGoogleCalendarAuth = async (req, res) => {
+  try {
+    const externalUserId = req.query.userId || DEFAULT_EXTERNAL_USER_ID;
+    const r = await composio.connectedAccounts.link(
+      externalUserId,
+      config.GCALENDAR_AUTH_CONFIG_ID,
+      { callbackUrl: config.GCALENDAR_LINK_CALLBACK_URL }
+    );
+    const url = r.linkUrl || r.redirectUrl;
+    if (!url)
+      return res.status(500).json({ ok: false, error: "Missing linkUrl" });
+    res.json({ ok: true, url });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
   }
 };
 
@@ -85,41 +117,6 @@ export const gmailCallback = async (req, res) => {
     }
 
     res.redirect("/?auth=success");
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e) });
-  }
-};
-
-// Start Google Calendar authentication
-export const startGoogleCalendarAuth = async (req, res) => {
-  try {
-    // Check if required environment variables are configured
-    if (!config.COMPOSIO_API_KEY) {
-      return res.status(500).json({
-        ok: false,
-        error:
-          "Composio API key not configured. Please set COMPOSIO_API_KEY in your .env file.",
-      });
-    }
-
-    if (!config.GCALENDAR_AUTH_CONFIG_ID) {
-      return res.status(500).json({
-        ok: false,
-        error:
-          "Google Calendar auth config ID not configured. Please set COMPOSIO_GCALENDAR_AUTH_CONFIG_ID in your .env file.",
-      });
-    }
-
-    const externalUserId = req.query.userId || DEFAULT_EXTERNAL_USER_ID;
-    const r = await composio.connectedAccounts.link(
-      externalUserId,
-      config.GCALENDAR_AUTH_CONFIG_ID,
-      { callbackUrl: config.GCALENDAR_LINK_CALLBACK_URL }
-    );
-    const url = r.linkUrl || r.redirectUrl;
-    if (!url)
-      return res.status(500).json({ ok: false, error: "Missing linkUrl" });
-    res.json({ ok: true, url });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) });
   }
@@ -155,6 +152,35 @@ export const googleCalendarCallback = async (req, res) => {
   }
 };
 
+// Handle Google Meetings authentication callback
+export const googleMeetingsCallback = async (req, res) => {
+  try {
+    const { error, status, connected_account_id } = req.query;
+
+    if (error) {
+      return res
+        .status(400)
+        .json({ ok: false, error: `Authentication failed: ${error}` });
+    }
+
+    if (status === "success" && connected_account_id) {
+      const redirectUrl =
+        process.env.NODE_ENV === "production"
+          ? "/?auth=success&account_id=" + connected_account_id
+          : "http://localhost:5174/?auth=success&account_id=" +
+            connected_account_id;
+      return res.redirect(redirectUrl);
+    }
+
+    if (!connected_account_id) {
+      return res.status(400).json({ ok: false, error: "Missing account ID" });
+    }
+
+    res.redirect("/?auth=success");
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+};
 // Handle Canvas authentication callback
 export const canvasCallback = async (req, res) => {
   try {
@@ -209,6 +235,14 @@ export const checkAuthStatus = async (req, res) => {
       (c) => c.toolkit?.slug === "canvas" && c.status === "ACTIVE"
     );
 
+    const googleMeetingsConns = allConnections.items.filter(
+      (c) =>
+        (c.toolkit?.slug === "googlemeetings" ||
+          c.toolkit?.slug === "gmeet" ||
+          c.toolkit?.slug === "googlemeet") &&
+        c.status === "ACTIVE"
+    );
+
     res.json({
       ok: true,
       connectedAccounts: {
@@ -216,6 +250,8 @@ export const checkAuthStatus = async (req, res) => {
         gmailConnections: gmailConns,
         googlecalendar: googleCalendarConns.length > 0,
         googlecalendarConnections: googleCalendarConns,
+        googlemeetings: googleMeetingsConns.length > 0,
+        googlemeetingsConnections: googleMeetingsConns,
         canvas: canvasConns.length > 0,
         canvasConnections: canvasConns,
         totalConnections: allConnections.items.length,
