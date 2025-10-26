@@ -11,6 +11,7 @@ export const composio = new Composio({
   toolkitVersions: {
     GMAIL: "20251024_00",
     CANVAS: "20251023_01",
+    GOOGLECALENDAR: "20251024_00",
   },
 });
 

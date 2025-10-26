@@ -16,7 +16,9 @@ export default function App() {
   const [pending, setPending] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState({
     gmail: false,
+    googlecalendar: false,
     canvas: false,
+    zoom: false,
     loading: true
   });
   const endRef = useRef(null);
@@ -27,6 +29,19 @@ export default function App() {
 
   useEffect(() => {
     checkConnectionStatus();
+    
+    // Handle authentication callback
+    const urlParams = new URLSearchParams(window.location.search);
+    const auth = urlParams.get('auth');
+    const accountId = urlParams.get('account_id');
+    
+    if (auth === 'success' && accountId) {
+      console.log('Authentication successful, account ID:', accountId);
+      // Clear the URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+      // Check connection status again after successful auth
+      setTimeout(checkConnectionStatus, 1000);
+    }
   }, []);
 
   async function checkConnectionStatus() {
@@ -36,7 +51,9 @@ export default function App() {
       if (data?.ok) {
         setConnectionStatus({
           gmail: data.connectedAccounts.gmail,
+          googlecalendar: data.connectedAccounts.googlecalendar,
           canvas: data.connectedAccounts.canvas,
+          zoom: data.connectedAccounts.zoom,
           loading: false
         });
       }
@@ -62,7 +79,7 @@ export default function App() {
       if (data?.ok && data.url) {
         window.open(data.url, '_blank');
         // Check status after a delay to see if connection was successful
-        setTimeout(checkConnectionStatus, 3000);
+        setTimeout(checkConnectionStatus, 5000);
       }
     } catch (e) {
       console.error("Failed to start Gmail auth:", e);
@@ -83,6 +100,34 @@ export default function App() {
       }
     } catch (e) {
       console.error("Failed to start Canvas auth:", e);
+    }
+  }
+
+  async function connectGoogleCalendar() {
+    try {
+      const res = await fetch(`/api/auth/gcalendar/start?userId=${userId}`);
+      const data = await res.json();
+      if (data?.ok && data.url) {
+        window.open(data.url, '_blank');
+        // Check status after a delay to see if connection was successful
+        setTimeout(checkConnectionStatus, 5000);
+      }
+    } catch (e) {
+      console.error("Failed to start Google Calendar auth:", e);
+    }
+  }
+
+  async function connectZoom() {
+    try {
+      const res = await fetch(`/api/auth/zoom/start?userId=${userId}`);
+      const data = await res.json();
+      if (data?.ok && data.url) {
+        window.open(data.url, '_blank');
+        // Check status after a delay to see if connection was successful
+        setTimeout(checkConnectionStatus, 5000);
+      }
+    } catch (e) {
+      console.error("Failed to start Zoom auth:", e);
     }
   }
 
@@ -135,29 +180,63 @@ export default function App() {
       <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
         <button 
           onClick={connectGmail}
+          disabled={connectionStatus.gmail}
           style={{
             padding: '8px 16px',
             backgroundColor: connectionStatus.gmail ? '#4CAF50' : '#f44336',
             color: 'white',
             border: 'none',
             borderRadius: '4px',
-            cursor: 'pointer'
+            cursor: connectionStatus.gmail ? 'not-allowed' : 'pointer',
+            opacity: connectionStatus.gmail ? 0.7 : 1
           }}
         >
           Gmail: {connectionStatus.gmail ? 'Connected' : 'Not Connected'}
         </button>
         <button 
+          onClick={connectGoogleCalendar}
+          disabled={connectionStatus.googlecalendar}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: connectionStatus.googlecalendar ? '#4CAF50' : '#f44336',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: connectionStatus.googlecalendar ? 'not-allowed' : 'pointer',
+            opacity: connectionStatus.googlecalendar ? 0.7 : 1
+          }}
+        >
+          Calendar: {connectionStatus.googlecalendar ? 'Connected' : 'Not Connected'}
+        </button>
+        <button 
           onClick={connectCanvas}
+          disabled={connectionStatus.canvas}
           style={{
             padding: '8px 16px',
             backgroundColor: connectionStatus.canvas ? '#4CAF50' : '#f44336',
             color: 'white',
             border: 'none',
             borderRadius: '4px',
-            cursor: 'pointer'
+            cursor: connectionStatus.canvas ? 'not-allowed' : 'pointer',
+            opacity: connectionStatus.canvas ? 0.7 : 1
           }}
         >
           Canvas: {connectionStatus.canvas ? 'Connected' : 'Not Connected'}
+        </button>
+        <button 
+          onClick={connectZoom}
+          disabled={connectionStatus.zoom}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: connectionStatus.zoom ? '#4CAF50' : '#f44336',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: connectionStatus.zoom ? 'not-allowed' : 'pointer',
+            opacity: connectionStatus.zoom ? 0.7 : 1
+          }}
+        >
+          Zoom: {connectionStatus.zoom ? 'Connected' : 'Not Connected'}
         </button>
         {connectionStatus.loading && <span>Loading...</span>}
       </div>
