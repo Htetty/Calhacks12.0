@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import OnboardingScreen from "./OnboardingScreen";
+import "./OnboardingScreen.css";
 
 export default function App() {
   const [userId] = useState(() => {
@@ -21,6 +23,8 @@ export default function App() {
     canvas: false,
     loading: true
   });
+  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -67,22 +71,33 @@ export default function App() {
     }
   }, []);
 
+
   async function checkConnectionStatus() {
     try {
       const res = await fetch("/api/auth/status");
       const data = await res.json();
       if (data?.ok) {
-        setConnectionStatus({
+        const newStatus = {
           gmail: data.connectedAccounts.gmail,
           googlecalendar: data.connectedAccounts.googlecalendar,
           googlemeetings: data.connectedAccounts.googlemeetings,
           canvas: data.connectedAccounts.canvas,
           loading: false
-        });
+        };
+        setConnectionStatus(newStatus);
+        
+        // On initial load, always show onboarding until user clicks Next
+        if (initialLoad) {
+          setShowOnboarding(true);
+          setInitialLoad(false);
+        }
       }
     } catch (e) {
       console.error("Failed to check connection status:", e);
       setConnectionStatus(prev => ({ ...prev, loading: false }));
+      if (initialLoad) {
+        setInitialLoad(false);
+      }
     }
   }
 
@@ -371,6 +386,32 @@ export default function App() {
       e.preventDefault();
       send();
     }
+  }
+
+  function handleOnboardingComplete() {
+    setShowOnboarding(false);
+    checkConnectionStatus();
+  }
+
+  // Show loading state during initial connection check
+  if (initialLoad && connectionStatus.loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        fontSize: '18px',
+        color: '#64748b'
+      }}>
+        Loading...
+      </div>
+    );
+  }
+
+  // Show onboarding screen if user hasn't connected services
+  if (showOnboarding) {
+    return <OnboardingScreen onComplete={handleOnboardingComplete} />;
   }
 
   return (

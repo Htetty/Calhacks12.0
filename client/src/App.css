@@ -21,7 +21,6 @@ body {
   background: var(--bg);
   color: var(--text);
   height: 100vh;
-  overflow: hidden;
 }
 
 .chat-container {
