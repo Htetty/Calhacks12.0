@@ -18,7 +18,6 @@ export default function App() {
     gmail: false,
     googlecalendar: false,
     canvas: false,
-    zoom: false,
     loading: true
   });
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -76,7 +75,6 @@ export default function App() {
           gmail: data.connectedAccounts.gmail,
           googlecalendar: data.connectedAccounts.googlecalendar,
           canvas: data.connectedAccounts.canvas,
-          zoom: data.connectedAccounts.zoom,
           loading: false
         });
       }
@@ -137,20 +135,6 @@ export default function App() {
       }
     } catch (e) {
       console.error("Failed to start Google Calendar auth:", e);
-    }
-  }
-
-  async function connectZoom() {
-    try {
-      const res = await fetch(`/api/auth/zoom/start?userId=${userId}`);
-      const data = await res.json();
-      if (data?.ok && data.url) {
-        window.open(data.url, '_blank');
-        // Check status after a delay to see if connection was successful
-        setTimeout(checkConnectionStatus, 5000);
-      }
-    } catch (e) {
-      console.error("Failed to start Zoom auth:", e);
     }
   }
 
@@ -422,21 +406,6 @@ export default function App() {
           }}
         >
           Canvas: {connectionStatus.canvas ? 'Connected' : 'Not Connected'}
-        </button>
-        <button 
-          onClick={connectZoom}
-          disabled={connectionStatus.zoom}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: connectionStatus.zoom ? '#4CAF50' : '#f44336',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: connectionStatus.zoom ? 'not-allowed' : 'pointer',
-            opacity: connectionStatus.zoom ? 0.7 : 1
-          }}
-        >
-          Zoom: {connectionStatus.zoom ? 'Connected' : 'Not Connected'}
         </button>
         {connectionStatus.loading && <span>Loading...</span>}
       </div>

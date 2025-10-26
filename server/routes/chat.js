@@ -116,7 +116,6 @@ export const chat = async (req, res) => {
     const hasCanvas = userConnections.some(
       (c) => normalizeSlug(c) === "canvas"
     );
-    const hasZoom = userConnections.some((c) => normalizeSlug(c) === "zoom");
 
     // Load tools only for connected services
     const tools = [];
@@ -181,7 +180,6 @@ export const chat = async (req, res) => {
       gmail: hasGmail,
       googlecalendar: hasGoogleCalendar,
       canvas: hasCanvas,
-      zoom: hasZoom,
     };
 
     // Generate current date string like "October 25, 2025"
@@ -195,7 +193,7 @@ export const chat = async (req, res) => {
     // Human-like, friendly system prompt that still enforces correctness and formatting
     const systemPrompt = `
 You are a warm, intelligent personal assistant who speaks like a real human.
-You help students manage time, tasks, and communication using real data from Gmail, Google Calendar, Canvas, and Zoom via tools.
+You help students manage time, tasks, and communication using real data from Gmail, Google Calendar, and Canvas via tools.
 
 VOICE & STYLE (strict)
 - Answer in short, natural paragraphs with complete sentences.
@@ -332,7 +330,6 @@ ENVIRONMENT HINTS
       if (!hasGoogleCalendar) lines.push("• Google Calendar not connected");
       if (!hasGmail) lines.push("• Gmail not connected");
       if (!hasCanvas) lines.push("• Canvas not connected");
-      if (!hasZoom) lines.push("• Zoom not connected");
 
       return res.json({
         ok: true,

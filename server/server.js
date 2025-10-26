@@ -24,11 +24,9 @@ app.get("/api/health", (req, res) => {
 
 app.get("/api/auth/gmail/start", authRoutes.startGmailAuth);
 app.get("/api/auth/gcalendar/start", authRoutes.startGoogleCalendarAuth);
-app.get("/api/auth/zoom/start", authRoutes.startZoomAuth);
 app.post("/api/auth/canvas/start", authRoutes.startCanvasAuth);
 app.get("/api/auth/gmail/callback", authRoutes.gmailCallback);
 app.get("/api/auth/gcalendar/callback", authRoutes.googleCalendarCallback);
-app.get("/api/auth/zoom/callback", authRoutes.zoomCallback);
 app.get("/api/auth/canvas/callback", authRoutes.canvasCallback);
 app.get("/api/auth/status", authRoutes.checkAuthStatus);
 app.post("/api/auth/gmail/unlink", authRoutes.unlinkGmail);

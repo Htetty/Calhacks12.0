@@ -36,49 +36,6 @@ export const startGmailAuth = async (req, res) => {
   }
 };
 
-export const startZoomAuth = async (req, res) => {
-  try {
-    // Check if required environment variables are configured
-    if (!config.COMPOSIO_API_KEY) {
-      return res.status(500).json({
-        ok: false,
-        error:
-          "Composio API key not configured. Please set COMPOSIO_API_KEY in your .env file.",
-      });
-    }
-
-    if (!config.ZOOM_AUTH_CONFIG_ID) {
-      return res.status(500).json({
-        ok: false,
-        error:
-          "Zoom auth config ID not configured. Please set COMPOSIO_ZOOM_AUTH_CONFIG_ID in your .env file.",
-      });
-    }
-
-    if (!config.ZOOM_LINK_CALLBACK_URL_ZOOM) {
-      return res.status(500).json({
-        ok: false,
-        error:
-          "Zoom callback URL not configured. Please set COMPOSIO_LINK_CALLBACK_URL_ZOOM in your .env file.",
-      });
-    }
-
-    const externalUserId = req.query.userId || DEFAULT_EXTERNAL_USER_ID; // Use userId from query or default
-
-    const r = await composio.connectedAccounts.link(
-      externalUserId,
-      config.ZOOM_AUTH_CONFIG_ID,
-      { callbackUrl: config.ZOOM_LINK_CALLBACK_URL_ZOOM }
-    );
-
-    const url = r.linkUrl || r.redirectUrl;
-    if (!url)
-      return res.status(500).json({ ok: false, error: "Missing linkUrl" });
-    res.json({ ok: true, url });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e) });
-  }
-};
 // Start Canvas authentication
 export const startCanvasAuth = async (req, res) => {
   try {
@@ -105,35 +62,6 @@ export const startCanvasAuth = async (req, res) => {
 
 // Handle Gmail authentication callback
 export const gmailCallback = async (req, res) => {
-  try {
-    const { error, status, connected_account_id } = req.query;
-
-    if (error) {
-      return res
-        .status(400)
-        .json({ ok: false, error: `Authentication failed: ${error}` });
-    }
-
-    if (status === "success" && connected_account_id) {
-      const redirectUrl =
-        process.env.NODE_ENV === "production"
-          ? "/?auth=success&account_id=" + connected_account_id
-          : "http://localhost:5174/?auth=success&account_id=" +
-            connected_account_id;
-      return res.redirect(redirectUrl);
-    }
-
-    if (!connected_account_id) {
-      return res.status(400).json({ ok: false, error: "Missing account ID" });
-    }
-
-    res.redirect("/?auth=success");
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e) });
-  }
-};
-
-export const zoomCallback = async (req, res) => {
   try {
     const { error, status, connected_account_id } = req.query;
 
@@ -281,10 +209,6 @@ export const checkAuthStatus = async (req, res) => {
       (c) => c.toolkit?.slug === "canvas" && c.status === "ACTIVE"
     );
 
-    const zoomConns = allConnections.items.filter(
-      (c) => c.toolkit?.slug === "zoom" && c.status === "ACTIVE"
-    );
-
     res.json({
       ok: true,
       connectedAccounts: {
@@ -294,8 +218,6 @@ export const checkAuthStatus = async (req, res) => {
         googlecalendarConnections: googleCalendarConns,
         canvas: canvasConns.length > 0,
         canvasConnections: canvasConns,
-        zoom: zoomConns.length > 0,
-        zoomConnections: zoomConns,
         totalConnections: allConnections.items.length,
       },
     });

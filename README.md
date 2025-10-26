@@ -6,7 +6,6 @@ A React + Express application that integrates with Canvas LMS and Gmail through 
 
 - **Gmail Integration**: Read and send emails
 - **Canvas Integration**: Access assignments, courses, and grades
-- **Zoom Integration**: Meeting management
 - **AI-Powered**: Uses Claude AI for natural language processing
 
 ## Setup Instructions
@@ -39,11 +38,6 @@ COMPOSIO_EXTERNAL_USER_ID=default_user_123
 COMPOSIO_GMAIL_AUTH_CONFIG_ID=your_gmail_auth_config_id_here
 COMPOSIO_LINK_CALLBACK_URL_GMAIL=http://localhost:3000/api/auth/gmail/callback
 
-# Zoom Integration
-# Configure these in your Composio dashboard
-COMPOSIO_ZOOM_AUTH_CONFIG_ID=your_zoom_auth_config_id_here
-COMPOSIO_LINK_CALLBACK_URL_ZOOM=http://localhost:3000/api/auth/zoom/callback
-
 # Canvas Integration
 # Get Canvas API key from your Canvas account settings
 CANVAS_API_KEY=your_canvas_api_key_here
@@ -71,15 +65,6 @@ COMPOSIO_CANVAS_AUTH_CONFIG_ID=your_canvas_auth_config_id_here
 2. Set up OAuth credentials
 3. Add the auth config ID to your `.env` file
 
-#### Zoom Integration
-
-1. Go to [Composio Dashboard](https://app.composio.dev/)
-2. Navigate to Apps → Zoom
-3. Click "Connect Account" or create a new connection
-4. Complete the OAuth flow to authorize Zoom
-5. Copy the Auth Config ID from the connection details
-6. Add it to your `.env` file as `COMPOSIO_ZOOM_AUTH_CONFIG_ID`
-
 #### Canvas Integration
 
 1. Go to your Canvas account settings
@@ -106,11 +91,11 @@ Open your browser to `http://localhost:3000`
 
 ## Usage
 
-1. **Connect Services**: Click the "Connect" buttons for Gmail, Canvas, and Zoom
+1. **Connect Services**: Click the "Connect" buttons for Gmail and Canvas
 2. **Chat**: Ask questions like:
    - "What's my latest email?"
    - "Show me my Canvas assignments"
-   - "What meetings do I have today?"
+   - "What events do I have on my calendar today?"
 
 ## Troubleshooting
 
@@ -121,16 +106,6 @@ This error occurs when environment variables are not properly configured. Make s
 - All required API keys are set in your `.env` file
 - The `.env` file is in the root directory
 - You've restarted the server after adding environment variables
-
-### "Application not found" Zoom Error
-
-If you see this error in the Zoom App Marketplace when trying to authenticate:
-
-1. The Zoom auth config ID in your `.env` may be invalid or pointing to a deleted app
-2. Go to [Composio Dashboard](https://app.composio.dev/) → Apps → Zoom
-3. Create a new connection and get a fresh auth config ID
-4. Update `COMPOSIO_ZOOM_AUTH_CONFIG_ID` in your `.env` file
-5. Restart your server
 
 ### Authentication Issues
 
